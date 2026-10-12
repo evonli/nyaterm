@@ -92,6 +92,9 @@ pub struct TerminalSettings {
     pub paste_image_as_path: bool,
     #[serde(default = "default_false")]
     pub reconnect_restore_cwd: bool,
+    /// 虚拟列宽：0 = 跟随窗口宽度；>0 时终端逻辑宽度固定（超宽输出不折行，需横向滚动查看）
+    #[serde(default = "default_virtual_columns")]
+    pub virtual_columns: u32,
 }
 
 fn default_scrollback() -> u32 {
@@ -105,6 +108,9 @@ fn default_keep_alive_mode() -> String {
 }
 fn default_timestamp_format() -> String {
     DEFAULT_TIMESTAMP_FORMAT.to_string()
+}
+fn default_virtual_columns() -> u32 {
+    0
 }
 
 impl TerminalSettings {
@@ -159,6 +165,7 @@ impl Default for TerminalSettings {
             show_multi_line_paste_dialog: true,
             paste_image_as_path: true,
             reconnect_restore_cwd: false,
+            virtual_columns: default_virtual_columns(),
         }
     }
 }
@@ -197,6 +204,15 @@ mod tests {
             serde_json::from_value(serde_json::json!({})).expect("terminal settings deserialize");
 
         assert_eq!(settings.timestamp_format, "[HH:mm:ss]");
+    }
+
+    #[test]
+    fn missing_virtual_columns_defaults_to_zero() {
+        let settings: TerminalSettings =
+            serde_json::from_value(serde_json::json!({})).expect("terminal settings deserialize");
+
+        assert_eq!(settings.virtual_columns, 0);
+        assert_eq!(TerminalSettings::default().virtual_columns, 0);
     }
 
     #[test]
