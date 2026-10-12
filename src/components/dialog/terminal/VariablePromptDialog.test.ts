@@ -66,4 +66,28 @@ describe("quick command variables", () => {
       }),
     ).toBe("ssh root@server.local && ping server.local");
   });
+
+  it("skips escaped placeholders as literals (docker --format)", () => {
+    const variables = parseCommandVariables("docker ps --format '\\{{.Names}}'");
+
+    expect(variables).toHaveLength(0);
+  });
+
+  it("parses real variables while keeping escaped literals intact", () => {
+    const command = "echo {{msg}} && docker ps --format '\\{{.Names}}'";
+    const variables = parseCommandVariables(command);
+
+    expect(variables.map(({ name }) => name)).toEqual(["msg"]);
+    expect(
+      resolveCommandVariables(command, variables, { "variable-0": "hello" }),
+    ).toBe("echo hello && docker ps --format '{{.Names}}'");
+  });
+
+  it("restores escaped braces back to literal double braces", () => {
+    const command = "docker ps --format '\\{{.Names}}'";
+
+    expect(resolveCommandVariables(command, [], {})).toBe(
+      "docker ps --format '{{.Names}}'",
+    );
+  });
 });

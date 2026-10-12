@@ -1799,7 +1799,7 @@
     "categoryPlaceholder": "例如：K8s",
     "colorTag": "颜色标签",
     "command": "命令",
-    "commandPlaceholder": "例如：ls -la\n使用 {{变量名}} 注入动态参数。",
+    "commandPlaceholder": "例如：ls -la\n使用 {{变量名}} 注入动态参数，\\{{...}} 输出字面量花括号（如 docker --format）。",
     "commandScript": "命令脚本",
     "compactListMode": "紧凑列表",
     "copyCommand": "复制命令",

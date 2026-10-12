@@ -156,7 +156,8 @@ function parseVariableContent(content: string) {
 }
 
 export function parseCommandVariables(command: string): VariableDef[] {
-  const regex = /\{\{([^}]+)\}\}/g;
+  // 负向后瞻：\{{...}} 视为字面量（如 docker ps --format '\{{.Names}}'），不解析为变量
+  const regex = /(?<!\\)\{\{([^}]+)\}\}/g;
   const matches = [...command.matchAll(regex)];
 
   const vars: VariableDef[] = [];
@@ -209,5 +210,6 @@ export function resolveCommandVariables(
       finalCmd = finalCmd.split(raw).join(value);
     });
   });
-  return finalCmd;
+  // 把转义的字面量 \{{ 还原为 {{（未被变量替换消耗的部分）
+  return finalCmd.split("\\{{").join("{{");
 }

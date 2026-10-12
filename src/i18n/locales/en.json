@@ -1801,7 +1801,7 @@
     "categoryPlaceholder": "e.g. K8s",
     "colorTag": "Color Tag",
     "command": "Command",
-    "commandPlaceholder": "e.g. ls -la\nUse {{varName}} for variables.",
+    "commandPlaceholder": "e.g. ls -la\nUse {{varName}} for variables; \\{{...}} escapes literal braces (e.g. docker --format).",
     "commandScript": "Script",
     "compactListMode": "Compact list",
     "copyCommand": "Copy command",
