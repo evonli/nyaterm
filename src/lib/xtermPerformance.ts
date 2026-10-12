@@ -5,7 +5,7 @@ export const XTERM_PERFORMANCE_CONFIG = {
     /** Delay before refreshing highlights; subsequent writes do not restart the timer. */
     writeRefreshIntervalMs: 80,
     /** Idle delay before refreshing highlights after viewport scrolling stops. */
-    scrollIdleDebounceMs: 120,
+    scrollIdleDebounceMs: 50,
     /** Idle delay before rebuilding highlights after a suspended terminal resumes. */
     resumeIdleDelayMs: 150,
     /** Lines above and below the viewport to keep decorated on most platforms. */

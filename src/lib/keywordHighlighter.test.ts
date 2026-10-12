@@ -286,7 +286,8 @@ describe("KeywordHighlighter", () => {
     vi.advanceTimersByTime(60);
     harness.active.viewportY = 130;
     harness.render();
-    vi.advanceTimersByTime(119);
+    const debounce = XTERM_PERFORMANCE_CONFIG.highlighting.scrollIdleDebounceMs;
+    vi.advanceTimersByTime(debounce - 1);
     expect(lines[140].translateSpy).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
