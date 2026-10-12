@@ -152,12 +152,13 @@ export class KeywordHighlighter implements IDisposable {
     this.compiledRules = [];
     for (const rule of rules) {
       if (!rule.enabled || rule.patterns.length === 0) continue;
+      const flags = rule.caseSensitive ? "g" : "gi";
       const validAlts: string[] = [];
       for (const pattern of rule.patterns) {
         const trimmed = pattern.trim();
         if (!trimmed) continue;
         try {
-          new RegExp(trimmed, "gi");
+          new RegExp(trimmed, flags);
           validAlts.push(trimmed);
         } catch {
           // silently skip invalid regex
@@ -167,12 +168,12 @@ export class KeywordHighlighter implements IDisposable {
       const combined =
         validAlts.length === 1 ? validAlts[0] : validAlts.map((p) => `(?:${p})`).join("|");
       try {
-        this.compiledRules.push({ regex: new RegExp(combined, "gi"), color: rule.color });
+        this.compiledRules.push({ regex: new RegExp(combined, flags), color: rule.color });
       } catch {
         // fallback: compile each pattern individually
         for (const alt of validAlts) {
           try {
-            this.compiledRules.push({ regex: new RegExp(alt, "gi"), color: rule.color });
+            this.compiledRules.push({ regex: new RegExp(alt, flags), color: rule.color });
           } catch {
             // skip
           }
