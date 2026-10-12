@@ -35,8 +35,18 @@ export function useTerminalHorizontalScroll(
     const viewport = getViewport();
     if (!viewport) return;
     setScrollLeft(viewport.scrollLeft);
-    setScrollMax(Math.max(0, viewport.scrollWidth - viewport.clientWidth));
     setClientWidth(viewport.clientWidth);
+
+    // 内容宽度取 viewport/screen/rows 三层的最大值：
+    // 不同 xterm 版本对超宽行的溢出传播行为不同，取最大最稳。
+    const screen = viewport.querySelector<HTMLElement>(".xterm-screen");
+    const rows = viewport.querySelector<HTMLElement>(".xterm-rows");
+    const contentWidth = Math.max(
+      viewport.scrollWidth,
+      screen?.scrollWidth ?? 0,
+      rows?.scrollWidth ?? 0,
+    );
+    setScrollMax(Math.max(0, contentWidth - viewport.clientWidth));
   }, [getViewport]);
 
   // 监听 viewport 横向滚动与尺寸变化（cols/resize 时 scrollWidth 会变）
@@ -44,6 +54,9 @@ export function useTerminalHorizontalScroll(
     if (!enabled) return;
     const viewport = getViewport();
     if (!viewport) return;
+    // 确保横向溢出可滚动（内联样式优先级最高，防止主题 CSS 覆盖）
+    const previousOverflowX = viewport.style.overflowX;
+    viewport.style.overflowX = "auto";
     sync();
 
     const onScroll = () => sync();
@@ -54,6 +67,7 @@ export function useTerminalHorizontalScroll(
     return () => {
       viewport.removeEventListener("scroll", onScroll);
       resizeObserver.disconnect();
+      viewport.style.overflowX = previousOverflowX;
     };
   }, [enabled, getViewport, sync]);
 
