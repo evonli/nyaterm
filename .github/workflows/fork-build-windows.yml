@@ -59,8 +59,9 @@ jobs:
 
       # beforeBuildCommand 会再跑一次 prepare:conpty + pnpm build，
       # 前者有缓存、后者多花 1-2 分钟，可接受。
+      # --config 用仓库内的 JSON 文件传参，避免多层 shell 引号转义问题。
       - name: Build Tauri app (NSIS)
-        run: pnpm tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+        run: pnpm tauri build --bundles nsis --config fork-tauri-override.json
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
