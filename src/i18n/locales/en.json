@@ -879,6 +879,8 @@
     "username": "Username",
     "usernameProvidedByAccount": "Provided by the selected account.",
     "usernameRequired": "Username is required",
+    "virtualColumns": "Virtual columns",
+    "virtualColumnsDesc": "0 = follow the window width. Set a larger value (e.g. 300) so wide output does not wrap; scroll horizontally with Shift+wheel or the bottom scrollbar. Full-screen apps like vim automatically revert to the window width.",
     "vncAutoReconnect": "Automatic reconnect",
     "vncClipboard": "Enable clipboard",
     "vncPasswordLimit": "Classic VNC authentication supports at most 8 password bytes. Passwords are never truncated.",

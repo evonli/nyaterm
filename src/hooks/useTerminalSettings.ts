@@ -20,9 +20,13 @@ function resolveTerminalRendererMode(options: {
   preference: TerminalRendererPreference;
   transparencyEnabled: boolean;
   webglCircuitBroken: boolean;
+  virtualColumns: number;
 }): ResolvedTerminalRendererMode {
   if (options.preference === "dom") return "dom";
   if (options.transparencyEnabled || options.webglCircuitBroken) return "dom";
+  // 虚拟列宽依赖 DOM renderer 的超宽内容布局做横向滚动，
+  // WebGL canvas 只渲染可视宽度，横向滚动会失效。
+  if (options.virtualColumns > 0) return "dom";
   if (options.preference === "webgl") return "webgl";
 
   return "dom";
@@ -161,6 +165,7 @@ export function useTerminalSettings(
       preference: terminalSettings.hardware_acceleration ? "webgl" : "dom",
       transparencyEnabled: terminalTransparencyEnabled,
       webglCircuitBroken: webglCircuitBrokenRef.current,
+      virtualColumns: terminalSettings.virtual_columns,
     });
     const shouldUseWebgl = rendererMode === "webgl";
 
@@ -231,6 +236,7 @@ export function useTerminalSettings(
     }
   }, [
     terminalSettings.hardware_acceleration,
+    terminalSettings.virtual_columns,
     terminalTransparencyEnabled,
     rendererVisible,
     terminalRef,
@@ -289,6 +295,17 @@ export function useTerminalSettings(
       terminalRef.current.options.scrollback = terminalSettings.scrollback_lines;
     }
   }, [terminalSettings.scrollback_lines, terminalRef]);
+
+  // React to virtual-columns changes: force a fit so the scheduler re-applies
+  // either the virtual column width or the real container width.
+  const previousVirtualColumnsRef = useRef(terminalSettings.virtual_columns);
+  useEffect(() => {
+    if (previousVirtualColumnsRef.current === terminalSettings.virtual_columns) {
+      return;
+    }
+    previousVirtualColumnsRef.current = terminalSettings.virtual_columns;
+    fitSchedulerRef.current?.schedule({ reason: "appearance", force: true });
+  }, [terminalSettings.virtual_columns, fitSchedulerRef]);
 
   // React to interaction settings changes
   useEffect(() => {

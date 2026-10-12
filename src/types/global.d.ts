@@ -1373,6 +1373,8 @@ export interface TerminalSettings {
   show_multi_line_paste_dialog: boolean;
   paste_image_as_path: boolean;
   reconnect_restore_cwd: boolean;
+  /** 虚拟列宽：0 = 跟随窗口宽度；>0 时终端逻辑宽度固定为该列数（超宽输出不折行，需横向滚动查看） */
+  virtual_columns: number;
 }
 
 export interface TransferSettings {

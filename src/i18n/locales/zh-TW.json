@@ -878,6 +878,8 @@
     "username": "使用者名稱",
     "usernameProvidedByAccount": "由所選帳戶提供。",
     "usernameRequired": "使用者名稱不能為空",
+    "virtualColumns": "虛擬列寬 (列)",
+    "virtualColumnsDesc": "0 = 跟隨視窗寬度。設為較大值（如 300）時超寬輸出不折行，可用 Shift+滾輪或底部捲軸橫向查看；進入 vim 等全螢幕程式時自動恢復視窗寬度。",
     "vncAutoReconnect": "自動重新連線",
     "vncClipboard": "啟用剪貼簿",
     "vncPasswordLimit": "傳統 VNC 驗證最多支援 8 個密碼位元組，密碼絕不會被靜默截斷。",

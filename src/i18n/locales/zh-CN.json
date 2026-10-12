@@ -878,6 +878,8 @@
     "username": "用户名",
     "usernameProvidedByAccount": "由所选账户提供。",
     "usernameRequired": "用户名不能为空",
+    "virtualColumns": "虚拟列宽 (列)",
+    "virtualColumnsDesc": "0 = 跟随窗口宽度。设为较大值（如 300）时超宽输出不折行，可用 Shift+滚轮或底部滚动条横向查看；进入 vim 等全屏程序时自动恢复窗口宽度。",
     "vncAutoReconnect": "自动重连",
     "vncClipboard": "启用剪贴板",
     "vncPasswordLimit": "经典 VNC 身份验证最多支持 8 个密码字节，密码绝不会被静默截断。",

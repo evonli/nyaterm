@@ -116,6 +116,8 @@ import type { Dec2026FrameGate } from "./dec2026FrameGate";
 import { useTerminalExternalDrop } from "./useTerminalExternalDrop";
 import { useTerminalFocusRestore } from "./useTerminalFocusRestore";
 import { useTerminalRefreshEffects } from "./useTerminalRefreshEffects";
+import { useTerminalHorizontalScroll } from "@/hooks/useTerminalHorizontalScroll";
+import TerminalHorizontalScrollbar from "./TerminalHorizontalScrollbar";
 import {
   buildClipboardPathPasteText,
   decodeOsc52ClipboardText,
@@ -1797,11 +1799,21 @@ export default function XTerminal({
     );
 
     const writeParsedDisposable = terminal.onWriteParsed(() => {
+      const previousAlternate =
+        alternateScreenTrackerRef.current.isAlternateScreenActive();
       alternateScreenTrackerRef.current.setXtermBufferType(
         terminal.buffer.active.type,
       );
       if (terminal.buffer.active.type === "alternate") {
         dismissSuggestions();
+      }
+      // 备用屏切换（vim/htop 等 TUI）：虚拟列宽在备用屏下临时失效，
+      // 恢复真实宽度；退出备用屏后重新应用虚拟列宽。
+      if (
+        alternateScreenTrackerRef.current.isAlternateScreenActive() !==
+        previousAlternate
+      ) {
+        fitSchedulerRef.current?.schedule({ reason: "observer", force: true });
       }
       const terminalSettings = terminalAppSettingsRef.current?.terminal;
       if (
@@ -1914,6 +1926,13 @@ export default function XTerminal({
       getTerminal: () => (isTerminalAlive() ? terminal : null),
       getFitAddon: () => fitAddonRef.current,
       getContainer: () => containerRef.current,
+      getVirtualColumns: () => {
+        // 备用屏（vim/htop 等 TUI）下禁用虚拟列宽，避免 TUI 布局错乱
+        if (alternateScreenTrackerRef.current.isAlternateScreenActive()) {
+          return 0;
+        }
+        return terminalAppSettingsRef.current?.terminal?.virtual_columns ?? 0;
+      },
       isVisible: () => visibleRef.current && !hibernatedRef.current,
       canFocus: () => !appLockedRef.current,
       onAfterFit: handleFitComplete,
@@ -2837,6 +2856,13 @@ export default function XTerminal({
     snapshotRestoringRef: restoringSnapshotRef,
   });
 
+  // 虚拟列宽模式的横向滚动控制（shift+滚轮 / 拖动条 / 光标跟随）
+  const horizontalScroll = useTerminalHorizontalScroll(
+    terminalInstance,
+    containerRef,
+    (terminalSettings.virtual_columns ?? 0) > 0,
+  );
+
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const doFind = useCallback(
@@ -2976,16 +3002,24 @@ export default function XTerminal({
           onSaveTranscript={onSaveTranscript}
         >
           <div
-            className={`nyaterm-wallpaper-transparent-surface nyaterm-terminal-surface h-full w-full ${
+            className={`nyaterm-wallpaper-transparent-surface nyaterm-terminal-surface relative h-full w-full ${
               showContentPadding ? "pl-2" : ""
             }`}
             style={{ backgroundColor: terminalBackground }}
           >
             <div
               ref={containerRef}
+              id={`nyaterm-terminal-viewport-${sessionId}`}
               data-terminal-root="true"
               className="nyaterm-wallpaper-transparent-surface nyaterm-terminal-surface h-full w-full"
               style={{ backgroundColor: terminalBackground }}
+            />
+            <TerminalHorizontalScrollbar
+              controlsId={`nyaterm-terminal-viewport-${sessionId}`}
+              scrollLeft={horizontalScroll.scrollLeft}
+              scrollMax={horizontalScroll.scrollMax}
+              clientWidth={horizontalScroll.clientWidth}
+              onChange={horizontalScroll.setScroll}
             />
           </div>
         </TerminalContextMenu>

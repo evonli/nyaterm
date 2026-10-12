@@ -878,6 +878,8 @@
     "username": "사용자 이름",
     "usernameProvidedByAccount": "선택한 계정에서 제공됩니다.",
     "usernameRequired": "사용자 이름이 필요합니다",
+    "virtualColumns": "가상 열 너비 (열)",
+    "virtualColumnsDesc": "0 = 창 너비를 따릅니다. 큰 값(예: 300)을 설정하면 넓은 출력이 줄바꿈되지 않으며 Shift+휠 또는 하단 스크롤바로 가로로 볼 수 있습니다. vim 같은 전체 화면 프로그램에서는 자동으로 창 너비로 돌아갑니다.",
     "vncAutoReconnect": "자동 재연결",
     "vncClipboard": "클립보드 사용",
     "vncPasswordLimit": "클래식 VNC 인증은 최대 8바이트 암호만 지원하며 암호를 자동으로 자르지 않습니다.",

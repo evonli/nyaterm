@@ -206,6 +206,21 @@ export function TerminalTab() {
           }
         />
 
+        <SettingNumberInput
+          label={t("settings.virtualColumns")}
+          desc={t("settings.virtualColumnsDesc")}
+          min={0}
+          max={1000}
+          step={20}
+          value={appSettings.terminal.virtual_columns ?? 0}
+          controlClassName="max-w-sm"
+          onChange={(v) =>
+            updateAppSettings({
+              terminal: { ...appSettings.terminal, virtual_columns: v || 0 },
+            })
+          }
+        />
+
         <SettingSelect
           label={t("settings.keepAliveMode")}
           desc={t(KEEP_ALIVE_MODE_DESCRIPTION_KEYS[keepAliveMode])}

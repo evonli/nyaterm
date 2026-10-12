@@ -12,7 +12,7 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-function createHarness() {
+function createHarness(options: { getVirtualColumns?: () => number } = {}) {
   let now = 0;
   let nextFrameId = 1;
   let nextTimerId = 1;
@@ -25,6 +25,10 @@ function createHarness() {
   const terminal = {
     cols: 80,
     rows: 24,
+    resize: vi.fn((cols: number, rows: number) => {
+      terminal.cols = cols;
+      terminal.rows = rows;
+    }),
     clearTextureAtlas: vi.fn(),
     focus: vi.fn(),
     refresh: vi.fn(),
@@ -48,6 +52,7 @@ function createHarness() {
     getTerminal: () => terminal,
     getFitAddon: () => fitAddon,
     getContainer: () => container,
+    getVirtualColumns: options.getVirtualColumns,
     isVisible: () => visible,
     canFocus: () => focusAllowed,
     requestAnimationFrame: (callback) => {
@@ -239,6 +244,42 @@ describe("TerminalFitScheduler", () => {
     expect(terminal.cols).toBe(121);
   });
 });
+
+  it("applies virtual columns width while rows follow the proposal", () => {
+    const { fitAddon, flushFrame, scheduler, setProposal, terminal } =
+      createHarness({ getVirtualColumns: () => 300 });
+
+    scheduler.schedule({ reason: "observer" });
+    setProposal({ cols: 120, rows: 40 });
+    flushFrame();
+
+    expect(fitAddon.fit).not.toHaveBeenCalled();
+    expect(terminal.cols).toBe(300);
+    expect(terminal.rows).toBe(40);
+  });
+
+  it("reapplies virtual columns width after the setting changes", () => {
+    const { flushFrame, scheduler, terminal } = createHarness({
+      getVirtualColumns: () => 250,
+    });
+
+    scheduler.schedule({ reason: "appearance", force: true });
+    flushFrame();
+
+    expect(terminal.cols).toBe(250);
+  });
+
+  it("falls back to normal fit when virtual columns returns zero", () => {
+    const { fitAddon, flushFrame, scheduler, terminal } = createHarness({
+      getVirtualColumns: () => 0,
+    });
+
+    scheduler.schedule({ reason: "observer", force: true });
+    flushFrame();
+
+    expect(fitAddon.fit).toHaveBeenCalledTimes(1);
+    expect(terminal.cols).not.toBe(0);
+  });
 
 describe("TerminalResizeDeduper", () => {
   it("sends the initial size and skips unchanged repeats", () => {

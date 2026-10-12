@@ -9,6 +9,7 @@ interface TerminalLike {
   cols: number;
   rows: number;
   element?: HTMLElement;
+  resize(cols: number, rows: number): void;
   clearTextureAtlas(): void;
   focus(): void;
   refresh(start: number, end: number): void;
@@ -62,6 +63,8 @@ interface TerminalFitSchedulerOptions {
   getTerminal: () => TerminalLike | null;
   getFitAddon: () => FitAddonLike | null;
   getContainer: () => HTMLElement | null;
+  /** 虚拟列宽：返回 >0 时 cols 固定为该值，仅垂直方向跟随容器；返回 0/undefined 时正常 fit。 */
+  getVirtualColumns?: () => number;
   isVisible: () => boolean;
   canFocus?: () => boolean;
   onAfterFit?: (result: TerminalFitResult) => void;
@@ -348,6 +351,66 @@ export class TerminalFitScheduler {
         observedWidth: request.observedWidth ?? rect.width,
         observedHeight: request.observedHeight ?? rect.height,
       });
+      return result;
+    }
+
+    const virtualColumns = this.options.getVirtualColumns?.() ?? 0;
+    if (virtualColumns > 0) {
+      // 虚拟列宽模式：cols 固定为配置值（超宽输出不折行），仅垂直方向跟随容器。
+      // 振荡抑制跳过——cols 恒定，只有 rows 会变。
+      const targetRows = proposed?.rows ?? terminal.rows;
+      if (!request.force && before.cols === virtualColumns && before.rows === targetRows) {
+        const result = complete({
+          after: before,
+          proposed,
+          applied: false,
+          skippedReason: "same_geometry",
+          observedWidth: request.observedWidth ?? rect.width,
+          observedHeight: request.observedHeight ?? rect.height,
+        });
+        this.logSkipped(request.reason, "same_geometry", request, proposed);
+        return result;
+      }
+
+      terminal.resize(virtualColumns, targetRows);
+
+      const after = { cols: terminal.cols, rows: terminal.rows };
+      if (request.clearTextureAtlas) {
+        terminal.clearTextureAtlas();
+      }
+      if (request.refresh) {
+        terminal.refresh(0, Math.max(0, terminal.rows - 1));
+      }
+      if (request.focus && (this.options.canFocus?.() ?? true)) {
+        terminal.focus();
+      }
+
+      const result = complete({
+        after,
+        proposed,
+        applied: true,
+        observedWidth: request.observedWidth ?? rect.width,
+        observedHeight: request.observedHeight ?? rect.height,
+      });
+
+      this.recordFitResult(after);
+      this.options.onAfterFit?.(result);
+      logger.debug({
+        domain: "terminal.resize",
+        event: "terminal.resize.virtual_columns_applied",
+        message: "Applied virtual-columns terminal resize",
+        ids: { session_id: this.options.sessionId },
+        data: {
+          reason: request.reason,
+          before_cols: before.cols,
+          before_rows: before.rows,
+          after_cols: after.cols,
+          after_rows: after.rows,
+          virtual_columns: virtualColumns,
+          device_pixel_ratio: getDevicePixelRatio(),
+        },
+      });
+
       return result;
     }
 
