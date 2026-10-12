@@ -6,6 +6,10 @@ export const XTERM_PERFORMANCE_CONFIG = {
     writeRefreshIntervalMs: 80,
     /** Idle delay before refreshing highlights after viewport scrolling stops. */
     scrollIdleDebounceMs: 50,
+    /** Per-frame follow refresh budget while the viewport is actively scrolling. */
+    scrollFollowBudgetMs: 2,
+    /** Minimum interval between follow refreshes during scrolling (per-frame throttle). */
+    scrollFollowThrottleMs: 16,
     /** Idle delay before rebuilding highlights after a suspended terminal resumes. */
     resumeIdleDelayMs: 150,
     /** Lines above and below the viewport to keep decorated on most platforms. */
@@ -23,7 +27,7 @@ export const XTERM_PERFORMANCE_CONFIG = {
     /** Hard cap for accepted keyword highlight matches on one physical line. */
     maxMatchesPerLine: 20,
     /** Main-thread time budget for one viewport refresh. */
-    maxRefreshTimeMs: 3,
+    maxRefreshTimeMs: 5,
     /** Maximum immutable scrollback rows retained in the regex match LRU. */
     maxCachedMatchLines: 3_000,
   },

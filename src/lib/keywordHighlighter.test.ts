@@ -295,7 +295,7 @@ describe("KeywordHighlighter", () => {
     highlighter.dispose();
   });
 
-  it("lets scrolling cancel a pending continuation frame", () => {
+  it("lets scrolling cancel a pending continuation frame and schedule a follow frame", () => {
     const denseText = `${"ERROR ".repeat(20)}`;
     const lines = Array.from({ length: 160 }, (_, index) =>
       createLine(index >= 20 && index <= 60 ? denseText : ""),
@@ -307,10 +307,16 @@ describe("KeywordHighlighter", () => {
     expect(rafCallbacks).toHaveLength(1);
     const decorationCount = harness.decorations.length;
 
+    // 滚动取消 continuation 帧，改为注册一个 follow 帧
     harness.active.viewportY = 41;
     harness.render();
-    expect(rafCallbacks).toHaveLength(0);
-    expect(harness.decorations).toHaveLength(decorationCount);
+    expect(rafCallbacks).toHaveLength(1);
+
+    // 执行 follow 帧后，新进入视口的行获得装饰
+    const [[rafId, follow]] = [...rafCallbacks.entries()];
+    rafCallbacks.delete(rafId);
+    follow(0);
+    expect(harness.decorations.length).toBeGreaterThan(decorationCount);
     highlighter.dispose();
   });
 
@@ -654,7 +660,7 @@ describe("KeywordHighlighter", () => {
       for (let index = 0; index < wrappedRows; index++) {
         const line = createLine(denseText, { wrapped: index > 0 });
         line.translateSpy.mockImplementation((trimRight: boolean) => {
-          now = 4;
+          now = 6;
           return trimRight ? denseText.replace(/\s+$/u, "") : denseText;
         });
         lines[startY + index] = line;
@@ -726,7 +732,7 @@ describe("KeywordHighlighter", () => {
         if (this.source === "ERROR" && result === null) {
           errorNullMatches++;
           const expiryNullMatch = highlightAcrossWrappedLines ? 1 : 2;
-          if (errorNullMatches === expiryNullMatch) now = 4;
+          if (errorNullMatches === expiryNullMatch) now = 6;
         }
         return result;
       });
@@ -836,7 +842,7 @@ describe("KeywordHighlighter", () => {
       let lineReads = 0;
       harness.getLineSpy.mockImplementation((lineY: number) => {
         lineReads++;
-        if (lineReads === 2) now = 4;
+        if (lineReads === 2) now = 6;
         return lines[lineY];
       });
       const performanceNow = vi.spyOn(performance, "now").mockImplementation(() => now);

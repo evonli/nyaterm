@@ -67,7 +67,13 @@ interface LogicalLineBoundsResult {
   status: LogicalLineBoundsStatus;
 }
 
-type RefreshReason = "write" | "scroll_idle" | "resume" | "continuation" | "resize";
+type RefreshReason =
+  | "write"
+  | "scroll_idle"
+  | "scroll_follow"
+  | "resume"
+  | "continuation"
+  | "resize";
 
 interface RefreshStats {
   cacheHits: number;
@@ -100,6 +106,8 @@ export class KeywordHighlighter implements IDisposable {
   private suppressedLineCache = new Map<number, true>();
   private writeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private scrollFollowFrame: number | null = null;
+  private lastFollowAt = -Infinity;
   private resumeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
   private resumeRefreshFrame: number | null = null;
   private continuationRefreshFrame: number | null = null;
@@ -224,6 +232,10 @@ export class KeywordHighlighter implements IDisposable {
       clearTimeout(this.scrollDebounceTimer);
       this.scrollDebounceTimer = null;
     }
+    if (this.scrollFollowFrame !== null) {
+      cancelAnimationFrame(this.scrollFollowFrame);
+      this.scrollFollowFrame = null;
+    }
     if (this.resumeRefreshTimer) {
       clearTimeout(this.resumeRefreshTimer);
       this.resumeRefreshTimer = null;
@@ -293,7 +305,12 @@ export class KeywordHighlighter implements IDisposable {
     }, XTERM_PERFORMANCE_CONFIG.highlighting.writeRefreshIntervalMs);
   }
 
-  /** Pure trailing debounce: scrolling always preempts pending highlight work. */
+  /**
+   * Scrolling preempts pending highlight work and schedules a trailing full
+   * refresh, plus per-frame follow refreshes so newly revealed rows get their
+   * highlights while the viewport is still moving (instead of only after it
+   * stops).
+   */
   private triggerScrollRefresh(): void {
     if (!this.canRefresh()) return;
     if (this.writeRefreshTimer !== null) {
@@ -307,6 +324,24 @@ export class KeywordHighlighter implements IDisposable {
       this.scrollDebounceTimer = null;
       this.refreshViewport("scroll_idle");
     }, XTERM_PERFORMANCE_CONFIG.highlighting.scrollIdleDebounceMs);
+    this.scheduleScrollFollowRefresh();
+  }
+
+  /** Throttled per-frame incremental refresh while scrolling. */
+  private scheduleScrollFollowRefresh(): void {
+    if (this.scrollFollowFrame !== null) return;
+    const now = performance.now();
+    if (
+      now - this.lastFollowAt <
+      XTERM_PERFORMANCE_CONFIG.highlighting.scrollFollowThrottleMs
+    ) {
+      return;
+    }
+    this.scrollFollowFrame = requestAnimationFrame(() => {
+      this.scrollFollowFrame = null;
+      this.lastFollowAt = performance.now();
+      this.refreshViewport("scroll_follow");
+    });
   }
 
   /**
@@ -1025,17 +1060,26 @@ export class KeywordHighlighter implements IDisposable {
     // Lines on the current screen (>= screenStartY) may still change via escape sequences.
     const screenStartY = buffer.baseY;
     const config = getKeywordHighlightPerformanceConfig();
+    // Follow refreshes run with a small budget over the visible rows only;
+    // the trailing full refresh handles the overscan zone.
+    const followMode = reason === "scroll_follow";
     const budget: RefreshBudget = {
       createdDecorations: 0,
-      deadlineMs: performance.now() + config.maxRefreshTimeMs,
+      deadlineMs:
+        performance.now() +
+        (followMode ? config.scrollFollowBudgetMs : config.maxRefreshTimeMs),
       hitLimit: false,
       hitTotalDecorationLimit: false,
     };
 
     // Expand the active zone with overscan so decorations survive typical scroll bursts
     // without being destroyed and recreated, eliminating highlight flicker.
-    const scanStart = Math.max(0, viewportY - config.resolvedOverscanLines);
-    const scanEnd = Math.min(totalLines - 1, viewportY + rows - 1 + config.resolvedOverscanLines);
+    const scanStart = followMode
+      ? viewportY
+      : Math.max(0, viewportY - config.resolvedOverscanLines);
+    const scanEnd = followMode
+      ? Math.min(totalLines - 1, viewportY + rows - 1)
+      : Math.min(totalLines - 1, viewportY + rows - 1 + config.resolvedOverscanLines);
 
     const requiredKeys = new Set<string>();
     const processedLines = new Set<number>();
@@ -1214,7 +1258,9 @@ export class KeywordHighlighter implements IDisposable {
       });
     }
 
-    if (budget.hitLimit && !budget.hitTotalDecorationLimit) {
+    // Follow refreshes deliberately skip continuation: the trailing full
+    // refresh after scrolling stops will pick up whatever was left.
+    if (budget.hitLimit && !budget.hitTotalDecorationLimit && !followMode) {
       this.triggerContinuationRefresh();
     }
   }
