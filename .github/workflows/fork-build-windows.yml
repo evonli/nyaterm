@@ -50,6 +50,15 @@ jobs:
 
       # fork 没有 TAURI_SIGNING_PRIVATE_KEY，禁用 updater 签名产物，
       # 其余（NSIS 安装包、ConPTY、MCP sidecar）与上游流程一致。
+      # 各阶段拆开便于定位失败步骤。
+      - name: Prepare ConPTY
+        run: pnpm prepare:conpty
+
+      - name: Build frontend (sidecar + tsc + vite)
+        run: pnpm build
+
+      # beforeBuildCommand 会再跑一次 prepare:conpty + pnpm build，
+      # 前者有缓存、后者多花 1-2 分钟，可接受。
       - name: Build Tauri app (NSIS)
         run: pnpm tauri build --bundles nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
 
