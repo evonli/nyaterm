@@ -5,12 +5,14 @@ import type { Terminal } from "@xterm/xterm";
 /**
  * 虚拟列宽模式的横向滚动控制。
  *
- * xterm 没有公开的横向滚动 API，这里直接控制 `.xterm-viewport` 的
- * scrollLeft（DOM renderer 下内容宽度 = cols * 单元格宽，超宽部分
- * 通过容器滚动查看）。提供：
+ * 不依赖 xterm viewport 的 scrollWidth（不同环境对超宽行的溢出传播
+ * 行为不一致），改为主动测量行元素布局宽度，并用 CSS transform 平移
+ * 整个 `.xterm-screen`（行、选中层、装饰、光标全部随之平移）。
+ *
+ * 提供：
  * - shift+滚轮 横向滚动
  * - 光标超出可视区时自动跟随
- * - scrollLeft / scrollMax 状态供横向滚动条组件使用
+ * - scrollLeft / scrollMax / clientWidth 状态供横向滚动条组件使用
  */
 export function useTerminalHorizontalScroll(
   terminal: Terminal | null,
@@ -21,55 +23,106 @@ export function useTerminalHorizontalScroll(
   const [scrollMax, setScrollMax] = useState(0);
   const [clientWidth, setClientWidth] = useState(0);
   const viewportRef = useRef<HTMLElement | null>(null);
+  const screenRef = useRef<HTMLElement | null>(null);
+  const measureFrameRef = useRef<number | null>(null);
+  const offsetRef = useRef(0);
+  const contentWidthRef = useRef(0);
 
-  const getViewport = useCallback((): HTMLElement | null => {
-    if (!containerRef.current) return null;
-    if (viewportRef.current?.isConnected) return viewportRef.current;
-    viewportRef.current = containerRef.current.querySelector<HTMLElement>(
-      ".xterm-viewport",
-    );
-    return viewportRef.current;
+  const getElements = useCallback((): {
+    viewport: HTMLElement | null;
+    screen: HTMLElement | null;
+  } => {
+    if (!containerRef.current) {
+      return { viewport: null, screen: null };
+    }
+    if (!viewportRef.current?.isConnected) {
+      viewportRef.current = containerRef.current.querySelector<HTMLElement>(
+        ".xterm-viewport",
+      );
+    }
+    if (!screenRef.current?.isConnected) {
+      screenRef.current = containerRef.current.querySelector<HTMLElement>(
+        ".xterm-screen",
+      );
+    }
+    return { viewport: viewportRef.current, screen: screenRef.current };
   }, [containerRef]);
 
-  const sync = useCallback(() => {
-    const viewport = getViewport();
-    if (!viewport) return;
-    setScrollLeft(viewport.scrollLeft);
+  const applyOffset = useCallback(
+    (offset: number) => {
+      const { viewport, screen } = getElements();
+      if (!viewport || !screen) return;
+      const clamped = Math.max(
+        0,
+        Math.min(offset, Math.max(0, contentWidthRef.current - viewport.clientWidth)),
+      );
+      offsetRef.current = clamped;
+      screen.style.transform = clamped > 0 ? `translateX(${-clamped}px)` : "";
+      setScrollLeft(clamped);
+    },
+    [getElements],
+  );
+
+  const measure = useCallback(() => {
+    const { viewport, screen } = getElements();
+    if (!viewport || !screen) return;
     setClientWidth(viewport.clientWidth);
 
-    // 内容宽度取 viewport/screen/rows 三层的最大值：
-    // 不同 xterm 版本对超宽行的溢出传播行为不同，取最大最稳。
-    const screen = viewport.querySelector<HTMLElement>(".xterm-screen");
-    const rows = viewport.querySelector<HTMLElement>(".xterm-rows");
-    const contentWidth = Math.max(
-      viewport.scrollWidth,
-      screen?.scrollWidth ?? 0,
-      rows?.scrollWidth ?? 0,
+    // 行元素 scrollWidth 反映自身内容边界（行 div 为块级元素，布局宽
+    // 等于可视宽，但 scrollWidth 包含溢出的全部 span）。取前 5 行最大。
+    const rowElements = screen.querySelectorAll<HTMLElement>(
+      ".xterm-rows > div",
     );
+    let contentWidth = 0;
+    const rowCount = Math.min(rowElements.length, 5);
+    for (let index = 0; index < rowCount; index++) {
+      const row = rowElements[index];
+      if (!row) continue;
+      contentWidth = Math.max(contentWidth, row.scrollWidth);
+    }
+    contentWidthRef.current = contentWidth;
     setScrollMax(Math.max(0, contentWidth - viewport.clientWidth));
-  }, [getViewport]);
+    applyOffset(offsetRef.current);
+  }, [getElements, applyOffset]);
 
-  // 监听 viewport 横向滚动与尺寸变化（cols/resize 时 scrollWidth 会变）
+  const scheduleMeasure = useCallback(() => {
+    if (measureFrameRef.current !== null) return;
+    measureFrameRef.current = requestAnimationFrame(() => {
+      measureFrameRef.current = null;
+      measure();
+    });
+  }, [measure]);
+
+  // 激活时：初始测量 + 监听尺寸/输出变化重测
   useEffect(() => {
     if (!enabled) return;
-    const viewport = getViewport();
-    if (!viewport) return;
-    // 确保横向溢出可滚动（内联样式优先级最高，防止主题 CSS 覆盖）
-    const previousOverflowX = viewport.style.overflowX;
-    viewport.style.overflowX = "auto";
-    sync();
+    const { viewport, screen } = getElements();
+    if (!viewport || !screen) return;
 
-    const onScroll = () => sync();
-    viewport.addEventListener("scroll", onScroll);
-    const resizeObserver = new ResizeObserver(() => sync());
+    measure();
+
+    const resizeObserver = new ResizeObserver(() => scheduleMeasure());
     resizeObserver.observe(viewport);
+    if (screen) resizeObserver.observe(screen);
+
+    const writeDisposable = terminal?.onWriteParsed(() => scheduleMeasure());
+    const renderDisposable = terminal?.onRender(() => scheduleMeasure());
 
     return () => {
-      viewport.removeEventListener("scroll", onScroll);
       resizeObserver.disconnect();
-      viewport.style.overflowX = previousOverflowX;
+      writeDisposable?.dispose();
+      renderDisposable?.dispose();
+      if (measureFrameRef.current !== null) {
+        cancelAnimationFrame(measureFrameRef.current);
+        measureFrameRef.current = null;
+      }
+      // 停用时清除平移
+      screen.style.transform = "";
+      offsetRef.current = 0;
+      setScrollLeft(0);
+      setScrollMax(0);
     };
-  }, [enabled, getViewport, sync]);
+  }, [enabled, getElements, measure, scheduleMeasure, terminal]);
 
   // shift+滚轮 → 横向滚动（纵向仍由 xterm 处理）
   useEffect(() => {
@@ -79,49 +132,48 @@ export function useTerminalHorizontalScroll(
 
     const onWheel = (event: WheelEvent) => {
       if (!event.shiftKey) return;
-      const viewport = getViewport();
-      if (!viewport || viewport.scrollWidth <= viewport.clientWidth) return;
       event.preventDefault();
-      viewport.scrollLeft += event.deltaY;
+      applyOffset(offsetRef.current + event.deltaY);
     };
 
     container.addEventListener("wheel", onWheel, { passive: false });
     return () => container.removeEventListener("wheel", onWheel);
-  }, [enabled, containerRef, getViewport]);
+  }, [enabled, containerRef, applyOffset]);
 
-  // 光标跟随：光标列超出可视区时自动横向平移
+  // 光标跟随：光标列超出可视区时自动平移
   useEffect(() => {
     if (!terminal || !enabled) return;
     const disposable = terminal.onCursorMove(() => {
-      const viewport = getViewport();
+      const { viewport } = getElements();
+      if (!viewport) return;
       const buffer = terminal.buffer.active;
-      if (!viewport || !buffer) return;
-      const cellWidth =
-        terminal.cols > 0 ? viewport.scrollWidth / terminal.cols : 0;
-      if (cellWidth <= 0) return;
+      if (!buffer) return;
+      const cols = terminal.cols;
+      if (cols <= 0) return;
 
-      const cursorLeft = buffer.cursorX * cellWidth;
-      const visibleRight = viewport.scrollLeft + viewport.clientWidth - cellWidth;
-      if (cursorLeft < viewport.scrollLeft) {
-        viewport.scrollLeft = Math.max(0, cursorLeft - cellWidth);
-      } else if (cursorLeft > visibleRight) {
-        viewport.scrollLeft = Math.max(
-          0,
-          cursorLeft - viewport.clientWidth + cellWidth * 2,
-        );
+      const contentWidth = contentWidthRef.current;
+      const visible = viewport.clientWidth;
+      if (contentWidth <= visible) return;
+
+      // 比例映射，无需精确单元格宽度
+      const cursorRatio = Math.min(1, buffer.cursorX / cols);
+      const cursorPx = cursorRatio * contentWidth;
+      const current = offsetRef.current;
+      const rightEdge = current + visible;
+      if (cursorPx < current) {
+        applyOffset(Math.max(0, cursorPx - visible * 0.1));
+      } else if (cursorPx > rightEdge) {
+        applyOffset(cursorPx - visible * 0.9);
       }
     });
     return () => disposable.dispose();
-  }, [terminal, enabled, getViewport]);
+  }, [terminal, enabled, getElements, applyOffset]);
 
   const setScroll = useCallback(
     (value: number) => {
-      const viewport = getViewport();
-      if (!viewport) return;
-      const max = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      viewport.scrollLeft = Math.max(0, Math.min(value, max));
+      applyOffset(value);
     },
-    [getViewport],
+    [applyOffset],
   );
 
   return { scrollLeft, scrollMax, clientWidth, setScroll };
